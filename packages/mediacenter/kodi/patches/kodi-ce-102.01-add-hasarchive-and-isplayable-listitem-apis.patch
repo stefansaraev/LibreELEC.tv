@@ -1,4 +1,4 @@
-From bdf49cc540bd415052acf8338b2ff6c86c8bf406 Mon Sep 17 00:00:00 2001
+From 0544a0fd2b257bffb8187f65c0ed730c4e49307a Mon Sep 17 00:00:00 2001
 From: Arthur Liberman <arthur_liberman@hotmail.com>
 Date: Fri, 19 Apr 2019 14:59:51 +0300
 Subject: [PATCH 1/2] add-hasarchive-and-isplayable-listitem-apis
@@ -115,7 +115,7 @@ literal 0
 HcmV?d00001
 
 diff --git a/addons/skin.estuary/xml/Variables.xml b/addons/skin.estuary/xml/Variables.xml
-index e4963c6bd5..bcc352d10a 100644
+index 5add45834e..0aeec8fb26 100644
 --- a/addons/skin.estuary/xml/Variables.xml
 +++ b/addons/skin.estuary/xml/Variables.xml
 @@ -3,6 +3,7 @@
@@ -126,7 +126,7 @@ index e4963c6bd5..bcc352d10a 100644
  	</variable>
  	<variable name="AutoCompletionContentVar">
  		<value condition="System.HasAddon(plugin.program.autocompletion) + !System.HasHiddenInput">plugin://plugin.program.autocompletion?info=autocomplete&amp;&amp;id=$INFO[Control.GetLabel(312).index(1)]&amp;&amp;limit=9</value>
-@@ -337,6 +338,7 @@
+@@ -346,6 +347,7 @@
  		<value condition="ListItem.IsCollection">overlays/set.png</value>
  		<value condition="ListItem.IsPlaying">overlays/watched/OverlayPlaying-List.png</value>
  		<value condition="ListItem.IsResumable">overlays/watched/resume.png</value>
@@ -134,7 +134,7 @@ index e4963c6bd5..bcc352d10a 100644
  		<value condition="Integer.IsGreater(ListItem.Playcount,0)">$INFO[ListItem.Overlay]</value>
  	</variable>
  	<!-- Breadcrumbs -->
-@@ -428,6 +430,7 @@
+@@ -437,6 +439,7 @@
  		<value condition="ListItem.HasTimer + !ListItem.TimerIsActive">icons/pvr/PVR-HasTimerDisabled.png</value>
  		<value condition="ListItem.HasTimerSchedule">icons/pvr/PVR-HasTimerSchedule.png</value>
  		<value condition="ListItem.HasTimer">icons/pvr/PVR-HasTimer.png</value>
@@ -143,7 +143,7 @@ index e4963c6bd5..bcc352d10a 100644
  	<variable name="SeasonEpisodeLabel">
  		<value condition="String.IsEmpty(ListItem.EpisodeName)">$INFO[ListItem.Season,S]$INFO[ListItem.Episode,E]</value>
 diff --git a/xbmc/GUIInfoManager.cpp b/xbmc/GUIInfoManager.cpp
-index 683d0f71b5..d6a89155d9 100644
+index 8d45a4ac61..ad6a210ff0 100644
 --- a/xbmc/GUIInfoManager.cpp
 +++ b/xbmc/GUIInfoManager.cpp
 @@ -3665,6 +3665,16 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
@@ -173,10 +173,10 @@ index 683d0f71b5..d6a89155d9 100644
                                    { "isencrypted",      LISTITEM_ISENCRYPTED },
                                    { "progress",         LISTITEM_PROGRESS },
 diff --git a/xbmc/guilib/guiinfo/GUIInfoLabels.h b/xbmc/guilib/guiinfo/GUIInfoLabels.h
-index 47c5831d29..4d82980c61 100644
+index d891c01c92..5d95922ae2 100644
 --- a/xbmc/guilib/guiinfo/GUIInfoLabels.h
 +++ b/xbmc/guilib/guiinfo/GUIInfoLabels.h
-@@ -867,6 +867,8 @@
+@@ -873,6 +873,8 @@
  #define LISTITEM_EXPIRATION_TIME    (LISTITEM_START + 181)
  #define LISTITEM_PROPERTY           (LISTITEM_START + 182)
  #define LISTITEM_EPG_EVENT_ICON     (LISTITEM_START + 183)
@@ -228,10 +228,10 @@ index 486e46fc1a..3c368c9058 100644
    },
    "PVR.Details.ChannelGroup": {
 diff --git a/xbmc/pvr/PVRGUIInfo.cpp b/xbmc/pvr/PVRGUIInfo.cpp
-index 7988e610c5..b48937cee1 100644
+index 91daa2a2d3..8a130187da 100644
 --- a/xbmc/pvr/PVRGUIInfo.cpp
 +++ b/xbmc/pvr/PVRGUIInfo.cpp
-@@ -1107,6 +1107,20 @@ bool CPVRGUIInfo::GetListItemAndPlayerBool(const CFileItem *item, const CGUIInfo
+@@ -1113,6 +1113,20 @@ bool CPVRGUIInfo::GetListItemAndPlayerBool(const CFileItem *item, const CGUIInfo
  {
    switch (info.m_info)
    {
@@ -345,5 +345,5 @@ index cf040c3e58..6c6d5f288c 100644
      //@}
  
 -- 
-2.20.1.windows.1
+2.27.0
 
