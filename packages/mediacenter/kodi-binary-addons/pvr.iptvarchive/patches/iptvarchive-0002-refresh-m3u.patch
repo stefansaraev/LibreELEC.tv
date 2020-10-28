@@ -1,0 +1,245 @@
+diff --git a/pvr.iptvsimple/resources/language/resource.language.en_gb/strings.po b/pvr.iptvsimple/resources/language/resource.language.en_gb/strings.po
+index 2f11805..e042ba5 100644
+--- a/pvr.iptvsimple/resources/language/resource.language.en_gb/strings.po
++++ b/pvr.iptvsimple/resources/language/resource.language.en_gb/strings.po
+@@ -48,7 +48,11 @@ msgctxt "#30013"
+ msgid "Numbering channels starts at"
+ msgstr ""
+ 
+-#empty strings from id 30014 to 30019
++msgctxt "#30014"
++msgid "M3U Refresh interval (minutes)"
++msgstr ""
++
++#empty strings from id 30015 to 30019
+ 
+ msgctxt "#30020"
+ msgid "EPG Settings"
+diff --git a/pvr.iptvsimple/resources/settings.xml b/pvr.iptvsimple/resources/settings.xml
+index 751d890..bd40a7c 100644
+--- a/pvr.iptvsimple/resources/settings.xml
++++ b/pvr.iptvsimple/resources/settings.xml
+@@ -9,6 +9,7 @@
+     <setting id="m3uCache" type="bool" label="30025" default="true" visible="eq(-3,1)"/>
+     <setting id="startNum" type="number" label="30013" default="1" />
+     <setting id="userAgent" type="text" label="30045" />
++    <setting id="m3uRefreshIntervalMins" type="slider" label="30014" default="30" range="10,5,120" option="int" />
+   </category>
+ 
+   <!-- EPG -->
+diff --git a/src/PVRIptvData.cpp b/src/PVRIptvData.cpp
+index 3c5f438..a660c03 100644
+--- a/src/PVRIptvData.cpp
++++ b/src/PVRIptvData.cpp
+@@ -218,15 +218,49 @@ PVRIptvData::PVRIptvData(void)
+   m_genres.clear();
+ 
+   LoadPlayList();
++
++  XBMC->Log(LOG_NOTICE, "Starting client update thread, interval %d min...", m_m3uRefreshIntervalMins);
++
++  m_running = true;
++  m_thread = std::thread([&] { Process(); });
+ }
+ 
+ void *PVRIptvData::Process(void)
+ {
++  unsigned int refreshTimer = 0;
++  time_t lastRefreshTimeSeconds = std::time(nullptr);
++
++  while (m_running)
++  {
++    std::this_thread::sleep_for(std::chrono::milliseconds(2 * 1000));
++
++    time_t currentRefreshTimeSeconds = std::time(nullptr);
++    refreshTimer += static_cast<unsigned int>(currentRefreshTimeSeconds - lastRefreshTimeSeconds);
++    lastRefreshTimeSeconds = currentRefreshTimeSeconds;
++
++    if (refreshTimer >= (m_m3uRefreshIntervalMins * 60))
++      m_refreshM3U = true;
++
++    if (m_running && m_refreshM3U)
++    {
++      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
++      RefreshM3U();
++
++      m_refreshM3U = false;
++      refreshTimer = 0;
++    }
++  }
++
+   return NULL;
+ }
+ 
+ PVRIptvData::~PVRIptvData(void)
+ {
++  XBMC->Log(LOG_NOTICE, "Stopping client update thread...");
++  m_running = false;
++  if (m_thread.joinable())
++    m_thread.join();
++
+   m_channels.clear();
+   m_groups.clear();
+   m_epg.clear();
+@@ -580,6 +614,92 @@ bool PVRIptvData::ParseOnScreenEpisodeNumberInfo(const std::string& episodeNumbe
+   return false;
+ }
+ 
++bool PVRIptvData::RefreshM3U()
++{
++  auto started = std::chrono::high_resolution_clock::now();
++  XBMC->Log(LOG_DEBUG, "%s PlayList ReLoad Start", __FUNCTION__);
++
++  if (m_strM3uUrl.empty())
++  {
++    return false;
++  }
++
++  std::string strPlaylistContent;
++  if (!GetCachedFileContents(M3U_FILE_NAME, m_strM3uUrl, strPlaylistContent, false))
++  {
++    return false;
++  }
++  std::stringstream stream(strPlaylistContent);
++
++  /* load channels */
++  bool bFirst = true;
++  int iChannelNum       = g_iStartNumber;
++
++  PVRIptvChannel tmpChannel = {0};
++
++  std::string strLine;
++  while(std::getline(stream, strLine))
++  {
++    strLine = StringUtils::TrimRight(strLine, " \t\r\n");
++    strLine = StringUtils::TrimLeft(strLine, " \t");
++
++    if (strLine.empty())
++    {
++      continue;
++    }
++
++    if (bFirst)
++    {
++      bFirst = false;
++      if (StringUtils::Left(strLine, 3) == "\xEF\xBB\xBF")
++      {
++        strLine.erase(0, 3);
++      }
++      if (StringUtils::Left(strLine, strlen(M3U_START_MARKER)) == M3U_START_MARKER)
++      {
++        continue;
++      }
++    }
++
++    if (StringUtils::Left(strLine, strlen(M3U_INFO_MARKER)) == M3U_INFO_MARKER)
++    {
++      std::string strChnlNo    = "";
++
++      // parse line
++      int iColon = (int)strLine.find(':');
++      int iComma = (int)strLine.rfind(',');
++      if (iColon >= 0 && iComma >= 0 && iComma > iColon)
++      {
++        iColon++;
++        std::string strInfoLine = StringUtils::Mid(strLine, iColon, iComma - iColon);
++
++        strChnlNo     = ReadMarkerValue(strInfoLine, TVG_INFO_CHNO_MARKER);
++
++        if (!strChnlNo.empty())
++        {
++          iChannelNum = atoi(strChnlNo.c_str());
++        }
++      }
++    }
++    else if (strLine[0] != '#')
++    {
++      for (unsigned int iChannelPtr = 0; iChannelPtr < m_channels.size(); iChannelPtr++)
++      {
++        PVRIptvChannel &channel = m_channels.at(iChannelPtr);
++        if (channel.iChannelNumber == iChannelNum)
++        {
++          channel.strStreamURL = strLine;
++        }
++      }
++    }
++  }
++
++  stream.clear();
++
++  XBMC->Log(LOG_DEBUG, "ReLoaded %d channels.", m_channels.size());
++  return true;
++}
++
+ bool PVRIptvData::LoadPlayList(void)
+ {
+   auto started = std::chrono::high_resolution_clock::now();
+diff --git a/src/PVRIptvData.h b/src/PVRIptvData.h
+index bb93a76..5823ac5 100644
+--- a/src/PVRIptvData.h
++++ b/src/PVRIptvData.h
+@@ -23,8 +23,10 @@
+  *
+  */
+ 
++#include <atomic>
+ #include <map>
+ #include <vector>
++#include <thread>
+ #include "p8-platform/os.h"
+ #include "kodi/libXBMC_pvr.h"
+ #include "p8-platform/threads/threads.h"
+@@ -137,6 +139,7 @@ public:
+   virtual bool      IsArchiveSupportedOnChannel(const PVRIptvChannel &channel);
+ 
+ protected:
++  virtual bool                 RefreshM3U(void);
+   virtual bool                 LoadPlayList(void);
+   virtual bool                 LoadEPG(time_t iStart, time_t iEnd);
+   virtual bool                 LoadGenres(void);
+@@ -181,4 +184,8 @@ private:
+   P8PLATFORM::CMutex                m_mutex;
+ 
+   long long                         m_iEpgUrlTimeOffset;
++
++  std::thread m_thread;
++  std::atomic<bool> m_running{false};
++  std::atomic_bool m_refreshM3U{false};
+ };
+diff --git a/src/client.cpp b/src/client.cpp
+index c6acdae..badb2c4 100644
+--- a/src/client.cpp
++++ b/src/client.cpp
+@@ -66,6 +66,7 @@ bool        g_bTSOverride   = true;
+ bool        g_bCacheM3U     = false;
+ bool        g_bCacheEPG     = false;
+ int         g_iEPGLogos     = 0;
++int         m_m3uRefreshIntervalMins = 30;
+ 
+ bool        g_bIsArchive    = false;
+ bool        g_bResetUrlOffset = false;
+@@ -131,6 +132,12 @@ void ADDON_ReadSettings(void)
+   {
+     g_iStartNumber = 1;
+   }
++
++  if (!XBMC->GetSetting("m3uRefreshIntervalMins", &m_m3uRefreshIntervalMins))
++  {
++    m_m3uRefreshIntervalMins = 30;
++  }
++
+   if (!XBMC->GetSetting("epgPathType", &iPathType))
+   {
+     iPathType = 1;
+diff --git a/src/client.h b/src/client.h
+index 6c3d334..8743bca 100644
+--- a/src/client.h
++++ b/src/client.h
+@@ -52,6 +52,7 @@ extern bool        g_bTSOverride;
+ extern bool        g_bCacheM3U;
+ extern bool        g_bCacheEPG;
+ extern int         g_iEPGLogos;
++extern int         m_m3uRefreshIntervalMins;
+ 
+ extern std::string PathCombine(const std::string &strPath, const std::string &strFileName);
+ extern std::string GetClientFilePath(const std::string &strFileName);
